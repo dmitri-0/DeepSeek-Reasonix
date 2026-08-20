@@ -6,7 +6,7 @@ import {
   type TranscriptScrollDiagnosticSource,
   type TranscriptTailWriteDiagnostic,
 } from "./transcriptScrollDiagnosticProbe";
-import { type TranscriptScrollMode, transcriptTailSettleBudgetExhausted } from "./transcriptScrollArbiter";
+import { type TranscriptScrollMode, transcriptTailSettleBudgetExhausted, transcriptTailShouldReaim } from "./transcriptScrollArbiter";
 import { nativeTranscriptDistanceFromBottom, TRANSCRIPT_AT_BOTTOM_THRESHOLD_PX } from "./transcriptScrollGeometry";
 
 const TAIL_STAGNANT_FRAME_LIMIT = 2;
@@ -58,6 +58,9 @@ export function createTranscriptTailSettle({
   } | null = null;
   let jumpTailTimer: number | null = null;
   let layoutTransientIdleTimer: number | null = null;
+  // Native scrollHeight recorded when the tail was last fully pinned. Guards
+  // the settle loop from re-aiming on every small bottom re-measurement.
+  let lastBottomHeight: number | null = null;
 
   const scrollToTail = (
     behavior: "auto" | "smooth",
@@ -66,6 +69,7 @@ export function createTranscriptTailSettle({
     const element = scrollRef.current;
     if (!element) return;
     const top = element.scrollHeight;
+    lastBottomHeight = top;
     if (CAPTURE_TRANSCRIPT_SCROLL_DIAGNOSTICS && diagnostic) {
       noteTranscriptScrollWrite({
         owner: "tail-follow",
@@ -92,6 +96,7 @@ export function createTranscriptTailSettle({
     if (tailSettleFrame !== null) cancelAnimationFrame(tailSettleFrame);
     tailSettleFrame = null;
     tailSettleProgress = null;
+    lastBottomHeight = null;
     if (jumpTailTimer !== null) window.clearTimeout(jumpTailTimer);
     jumpTailTimer = null;
     if (layoutTransientIdleTimer !== null) window.clearTimeout(layoutTransientIdleTimer);
@@ -147,6 +152,12 @@ export function createTranscriptTailSettle({
     }
     if (jumpTailTimer !== null) return;
     if (tailSettleFrame !== null) return;
+    // A layout event for bottom re-measurement (virtualized rows drawing in)
+    // does not need another settle if the tail is already pinned and the
+    // native height has barely grown — re-aiming here is the visible jitter.
+    if (!jump && !transcriptTailShouldReaim(lastBottomHeight, scrollElement.scrollHeight)) {
+      return;
+    }
     const generation = generationRef.current;
     const tick = () => {
       tailSettleFrame = null;

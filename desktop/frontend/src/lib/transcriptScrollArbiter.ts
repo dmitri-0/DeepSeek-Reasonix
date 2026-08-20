@@ -118,6 +118,18 @@ export function transcriptTailSettleBudgetExhausted(attempts: number): boolean {
   return attempts >= TRANSCRIPT_TAIL_SETTLE_MAX_ATTEMPTS;
 }
 
+// Minimum native scrollHeight growth before the tail-settle loop re-aims
+// against an already-pinned tail. Virtualized bottom rows emit many small
+// height deltas while being measured; re-aiming on every one is what makes the
+// pinned tail visibly jitter at the bottom of long sessions (#9208).
+export const TRANSCRIPT_TAIL_REARM_MIN_HEIGHT_PX = 24;
+
+/** Whether a settled tail should re-aim given the recorded bottom height. */
+export function transcriptTailShouldReaim(previousBottomHeight: number | null, currentHeight: number): boolean {
+  if (previousBottomHeight == null) return true;
+  return currentHeight - previousBottomHeight >= TRANSCRIPT_TAIL_REARM_MIN_HEIGHT_PX;
+}
+
 function transition(state: TranscriptScrollState, commands: readonly TranscriptScrollCommand[] = []): TranscriptScrollTransition {
   return { state, commands };
 }

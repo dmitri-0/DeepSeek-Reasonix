@@ -6,6 +6,7 @@ import {
   isTranscriptContentShrink,
   reduceTranscriptScroll,
   transcriptTailSettleBudgetExhausted,
+  transcriptTailShouldReaim,
   TRANSCRIPT_TAIL_SETTLE_MAX_ATTEMPTS,
   type TranscriptScrollEvent,
   type TranscriptScrollState,
@@ -266,6 +267,13 @@ check(transcriptTailSettleBudgetExhausted(TRANSCRIPT_TAIL_SETTLE_MAX_ATTEMPTS - 
 check(transcriptTailSettleBudgetExhausted(TRANSCRIPT_TAIL_SETTLE_MAX_ATTEMPTS) === true, "tail settle stops once the re-aim budget is exhausted");
 check(transcriptTailSettleBudgetExhausted(99) === true, "tail settle stops for any attempt count above the budget");
 check(TRANSCRIPT_TAIL_SETTLE_MAX_ATTEMPTS > 0, "the tail settle budget is positive");
+
+// The settle loop must not re-aim on small bottom re-measurements (virtualized
+// rows drawing in at the tail), or the pinned viewport visibly jitters.
+check(transcriptTailShouldReaim(null, 10_000) === true, "an unknown prior bottom height always re-aims");
+check(transcriptTailShouldReaim(10_000, 10_500) === true, "real tail growth re-aims");
+check(transcriptTailShouldReaim(10_000, 10_010) === false, "a few-pixel bottom re-measurement does not re-aim");
+check(transcriptTailShouldReaim(10_000, 9_500) === false, "native height shrink below the pinned tail does not re-aim");
 
 const wrapScroller = { scrollHeight: 500, scrollTop: 400, clientHeight: 80 };
 check(pinTranscriptScrollerToNativeTail(wrapScroller) === true, "a composer-wrap viewport shrink is off-bottom and gets pinned");
